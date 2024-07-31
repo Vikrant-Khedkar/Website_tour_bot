@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+"use client"
+import React, { useState, useEffect } from "react";
 import { Button, TextField } from "@mui/material";
 import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
@@ -6,10 +7,10 @@ import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { z } from "zod";
 import introJs from "intro.js";
 import "intro.js/introjs.css";
-
+const key = process.env.NEXT_PUBLIC_OPENAI_KEY
 // Initialize ChatOpenAI
 const chatModel = new ChatOpenAI({
-  openAIApiKey: "sk-proj-QnCZvH08P0YEdZBrF8r0T3BlbkFJH0RG7PZoYhXq5B5H8qJ0",
+  openAIApiKey: key,
   modelName: "gpt-4o",
   temperature: 0,
 });
@@ -148,6 +149,29 @@ const Chatbot = () => {
   const [messages, setMessages] = useState<any[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [generatedSteps, setGeneratedSteps] = useState<{ description: string; selector: string }[] | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const recognition = new (window as any).webkitSpeechRecognition();
+
+  useEffect(() => {
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInputValue(transcript);
+      handleSendMessage();
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+  }, [recognition]);
+
+  const handleMicClick = () => {
+    if (isListening) {
+      recognition.stop();
+    } else {
+      recognition.start();
+    }
+    setIsListening(!isListening);
+  };
 
   const toggleChatbot = () => {
     setIsOpen(!isOpen);
@@ -221,6 +245,9 @@ const Chatbot = () => {
               variant="outlined"
               size="small"
             />
+            <Button id="micButton" onClick={handleMicClick} style={styles.micButton}>
+              {isListening ? "Stop" : "Speak"}
+            </Button>
             <Button id="sendMessage" onClick={handleSendMessage} style={styles.sendButton}>
               Send
             </Button>
@@ -310,6 +337,15 @@ const styles = {
     border: "none",
     padding: "10px 20px",
     margin: "10px",
+    cursor: "pointer",
+    borderRadius: "5px",
+  },
+  micButton: {
+    backgroundColor: "#ff9800",
+    color: "#FFFFFF",
+    border: "none",
+    padding: "10px 20px",
+    marginRight: "10px",
     cursor: "pointer",
     borderRadius: "5px",
   },
