@@ -10,7 +10,7 @@ import "intro.js/introjs.css";
 // Initialize ChatOpenAI
 const chatModel = new ChatOpenAI({
   openAIApiKey: "sk-proj-QnCZvH08P0YEdZBrF8r0T3BlbkFJH0RG7PZoYhXq5B5H8qJ0",
-  modelName: "gpt-4",
+  modelName: "gpt-4o-mini",
   temperature: 0,
 });
 
@@ -27,13 +27,33 @@ const stepSchema = z.object({
 // Create a structured output parser
 const parser = StructuredOutputParser.fromZodSchema(stepSchema);
 
+function getDOMStructure() {
+  const structure = [];
+  function traverseDOM(element, depth = 0) {
+    const indent = '  '.repeat(depth);
+    const classNames = Array.from(element.classList).join('.');
+    const id = element.id ? `#${element.id}` : '';
+    structure.push(`${indent}${element.tagName.toLowerCase()}${id}${classNames ? `.${classNames}` : ''}`);
+    
+    for (const child of element.children) {
+      traverseDOM(child, depth + 1);
+    }
+  }
+  traverseDOM(document.body);
+  return structure.join('\n');
+}
+
 // Function to get structured steps from DOM using OpenAI API
 async function getIntroJsStepsFromDOM(userQuery: string, retries = 3) {
-  const prompt = `Based on the user's query and the current state of the page, generate a structured list of steps for a tutorial using Intro.js. Each step should include a description of the element and a selector to identify it on the page.
+  const domStructure = getDOMStructure();
+
+  const prompt = `Based on the user's query and the current state of the page, generate a structured list of steps for a tutorial using Intro.js. Each step should include a description of the element and a selector to identify it on the page. Use the following DOM structure to create accurate selectors:
+
+${domStructure}
 
 User Query: ${userQuery}
 
-Provide detailed and accurate steps to guide the user through the web app.
+Provide detailed and accurate steps to guide the user through the web app. Ensure that the selectors are valid and correspond to elements in the provided DOM structure.
 ${parser.getFormatInstructions()}`;
 
   for (let i = 0; i < retries; i++) {
@@ -50,20 +70,39 @@ ${parser.getFormatInstructions()}`;
       if (i === retries - 1) throw error;
     }
   }
-}function initializeIntroJs(steps: { description: string; selector: string }[]) {
+}
+
+function findSimilarElement(selector: string): Element | null {
+  // Try to find elements with partial class names or IDs
+  const parts = selector.split(/[.#]/);
+  for (const part of parts) {
+    if (part) {
+      const elements = document.querySelectorAll(`[class*="${part}"], [id*="${part}"]`);
+      if (elements.length > 0) {
+        return elements[0];
+      }
+    }
+  }
+  return null;
+}
+
+function initializeIntroJs(steps: { description: string; selector: string }[]) {
   console.log("Initializing IntroJS with steps:", steps);
   const parsedSteps = steps
     .map((step) => {
       const element = document.querySelector(step.selector);
       if (!element) {
         console.warn(`Element not found for selector: ${step.selector}`);
+        // Try to find a similar element
+        const similarElement = findSimilarElement(step.selector);
+        if (similarElement) {
+          console.log(`Found similar element for ${step.selector}:`, similarElement);
+          return { intro: step.description, element: similarElement };
+        }
       }
-      return {
-        intro: step.description,
-        element: element || document.body, // Fallback to body if element not found
-      };
+      return { intro: step.description, element: element || undefined };
     })
-    .filter((step) => step.element !== null);
+    .filter((step) => step.element !== undefined);
 
   console.log("Parsed steps:", parsedSteps);
 
@@ -73,7 +112,7 @@ ${parser.getFormatInstructions()}`;
   }
 
   try {
-    const tour = introJs.tour();
+    const tour = introJs();
     tour.setOptions({
       steps: parsedSteps,
       showStepNumbers: true,
@@ -85,6 +124,7 @@ ${parser.getFormatInstructions()}`;
     console.error("Error starting the tutorial:", error);
   }
 }
+
 // Chatbot component
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -95,17 +135,18 @@ const Chatbot = () => {
   const toggleChatbot = () => {
     setIsOpen(!isOpen);
   };
+
   const handleSendMessage = async () => {
     if (inputValue.trim()) {
       setMessages([...messages, { text: inputValue, sender: "user" }]);
       setInputValue("");
-  
+
       try {
         // Send user query to OpenAI API
         const steps = await getIntroJsStepsFromDOM(inputValue);
         console.log("Generated steps from API:", steps);
         setGeneratedSteps(steps);
-  
+
         setMessages((prevMessages) => [
           ...prevMessages,
           { text: "Tutorial generated successfully! Click 'Show Me' to start.", sender: "bot" },
@@ -120,6 +161,7 @@ const Chatbot = () => {
       }
     }
   };
+
   const handleShowTutorial = () => {
     console.log("Show Me button clicked");
     if (generatedSteps) {
@@ -132,7 +174,7 @@ const Chatbot = () => {
 
   return (
     <div style={styles.chatbotContainer}>
-      <Button onClick={toggleChatbot} style={styles.toggleButton}>
+      <Button id="toggleChat" onClick={toggleChatbot} style={styles.toggleButton}>
         {isOpen ? "Close Chat" : "Open Chat"}
       </Button>
       {isOpen && (
@@ -153,6 +195,7 @@ const Chatbot = () => {
           </div>
           <div style={styles.inputContainer}>
             <TextField
+              id="chatInput"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
@@ -161,12 +204,12 @@ const Chatbot = () => {
               variant="outlined"
               size="small"
             />
-            <Button onClick={handleSendMessage} style={styles.sendButton}>
+            <Button id="sendMessage" onClick={handleSendMessage} style={styles.sendButton}>
               Send
             </Button>
           </div>
-          {generatedSteps && (
-            <Button onClick={handleShowTutorial} style={styles.showMeButton}>
+          {generatedSteps && generatedSteps.length > 0 && (
+            <Button id="showTutorial" onClick={handleShowTutorial} style={styles.showMeButton}>
               Show Me
             </Button>
           )}
@@ -178,7 +221,6 @@ const Chatbot = () => {
 
 // Styles for the Chatbot component
 const styles = {
-  // ... (styles remain the same as in the original code)
   chatbotContainer: {
     position: "fixed",
     bottom: "20px",
@@ -203,7 +245,11 @@ const styles = {
     display: "flex",
     flexDirection: "column",
   },
-  // ... other styles ...
+  chatMessages: {
+    flex: 1,
+    overflowY: "auto",
+    padding: "10px",
+  },
   userMessage: {
     alignSelf: "flex-end",
     backgroundColor: "#0070f3",
@@ -224,9 +270,26 @@ const styles = {
     maxWidth: "80%",
     wordBreak: "break-word",
   },
+  inputContainer: {
+    display: "flex",
+    borderTop: "1px solid #cccccc",
+    padding: "10px",
+  },
+  input: {
+    flex: 1,
+    marginRight: "10px",
+  },
+  sendButton: {
+    backgroundColor: "#0070f3",
+    color: "#FFFFFF",
+    border: "none",
+    padding: "10px 20px",
+    cursor: "pointer",
+    borderRadius: "5px",
+  },
   showMeButton: {
     backgroundColor: "#4caf50",
-    color: "white",
+    color: "#FFFFFF",
     border: "none",
     padding: "10px 20px",
     margin: "10px",
