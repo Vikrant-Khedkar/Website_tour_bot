@@ -10,7 +10,7 @@ import "intro.js/introjs.css";
 // Initialize ChatOpenAI
 const chatModel = new ChatOpenAI({
   openAIApiKey: "sk-proj-QnCZvH08P0YEdZBrF8r0T3BlbkFJH0RG7PZoYhXq5B5H8qJ0",
-  modelName: "gpt-4o-mini",
+  modelName: "gpt-4o",
   temperature: 0,
 });
 
@@ -42,19 +42,33 @@ function getDOMStructure() {
   traverseDOM(document.body);
   return structure.join('\n');
 }
+// ... (previous imports and initializations remain the same)
 
 // Function to get structured steps from DOM using OpenAI API
 async function getIntroJsStepsFromDOM(userQuery: string, retries = 3) {
   const domStructure = getDOMStructure();
 
-  const prompt = `Based on the user's query and the current state of the page, generate a structured list of steps for a tutorial using Intro.js. Each step should include a description of the element and a selector to identify it on the page. Use the following DOM structure to create accurate selectors:
+  const prompt = `You are an AI assistant helping users navigate a web application. The application is a dashboard with various features and components. Based on the user's query and the current state of the page, generate a structured list of steps for a tutorial using Intro.js.
 
+User Query: "${userQuery}"
+
+Page Structure:
 ${domStructure}
 
-User Query: ${userQuery}
+Generate 3-5 steps for a tutorial that addresses the user's query. Each step should include:
+1. A clear, concise description of what the user should do or observe.
+2. An accurate CSS selector to identify the element on the page.
 
-Provide detailed and accurate steps to guide the user through the web app. Ensure that the selectors are valid and correspond to elements in the provided DOM structure.
-${parser.getFormatInstructions()}`;
+Ensure that the selectors are valid and correspond to elements in the provided DOM structure. Be specific and avoid generic selectors like 'body' or 'div'.
+
+${parser.getFormatInstructions()}
+
+Example of a good step:
+{
+  "description": "Click on the 'Analytics' button in the sidebar to view your data insights.",
+  "selector": "#sidebar-analytics-button"
+}
+`;
 
   for (let i = 0; i < retries; i++) {
     try {
@@ -64,7 +78,13 @@ ${parser.getFormatInstructions()}`;
       ]);
 
       const parsedOutput = await parser.parse(response.content);
-      return parsedOutput.steps;
+      const validatedSteps = validateSteps(parsedOutput.steps);
+      
+      if (validatedSteps.length > 0) {
+        return validatedSteps;
+      } else {
+        throw new Error("No valid steps generated");
+      }
     } catch (error) {
       console.error(`Error generating steps (attempt ${i + 1}):`, error);
       if (i === retries - 1) throw error;
@@ -72,18 +92,19 @@ ${parser.getFormatInstructions()}`;
   }
 }
 
-function findSimilarElement(selector: string): Element | null {
-  // Try to find elements with partial class names or IDs
-  const parts = selector.split(/[.#]/);
-  for (const part of parts) {
-    if (part) {
-      const elements = document.querySelectorAll(`[class*="${part}"], [id*="${part}"]`);
-      if (elements.length > 0) {
-        return elements[0];
-      }
+function validateSteps(steps: { description: string; selector: string }[]) {
+  return steps.filter(step => {
+    const element = document.querySelector(step.selector);
+    if (!element) {
+      console.warn(`Skipping step: Element not found for selector "${step.selector}"`);
+      return false;
     }
-  }
-  return null;
+    if (step.description.length < 10 || step.description.length > 150) {
+      console.warn(`Skipping step: Description length invalid for "${step.description}"`);
+      return false;
+    }
+    return true;
+  });
 }
 
 function initializeIntroJs(steps: { description: string; selector: string }[]) {
@@ -93,16 +114,11 @@ function initializeIntroJs(steps: { description: string; selector: string }[]) {
       const element = document.querySelector(step.selector);
       if (!element) {
         console.warn(`Element not found for selector: ${step.selector}`);
-        // Try to find a similar element
-        const similarElement = findSimilarElement(step.selector);
-        if (similarElement) {
-          console.log(`Found similar element for ${step.selector}:`, similarElement);
-          return { intro: step.description, element: similarElement };
-        }
+        return null;
       }
-      return { intro: step.description, element: element || undefined };
+      return { intro: step.description, element: element };
     })
-    .filter((step) => step.element !== undefined);
+    .filter((step): step is NonNullable<typeof step> => step !== null);
 
   console.log("Parsed steps:", parsedSteps);
 
@@ -125,6 +141,7 @@ function initializeIntroJs(steps: { description: string; selector: string }[]) {
   }
 }
 
+// ... (rest of the Chatbot component remains the same)
 // Chatbot component
 const Chatbot = () => {
   const [isOpen, setIsOpen] = useState(false);
