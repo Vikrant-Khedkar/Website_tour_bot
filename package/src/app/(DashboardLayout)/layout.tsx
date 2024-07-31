@@ -3,6 +3,7 @@ import { styled, Container, Box } from "@mui/material";
 import React, { useState } from "react";
 import Header from "@/app/(DashboardLayout)/layout/header/Header";
 import Sidebar from "@/app/(DashboardLayout)/layout/sidebar/Sidebar";
+import Chatbot from "@/app/(DashboardLayout)/components/chatbot/Chatbot"; // Ensure correct import path
 
 const MainWrapper = styled("div")(() => ({
   display: "flex",
@@ -31,6 +32,7 @@ export default function RootLayout({
 }) {
   const [isSidebarOpen, setSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  
   return (
     <MainWrapper className="mainwrapper">
       {/* ------------------------------------------- */}
@@ -60,13 +62,17 @@ export default function RootLayout({
           {/* ------------------------------------------- */}
           {/* Page Route */}
           {/* ------------------------------------------- */}
-          <Box sx={{ minHeight: "calc(100vh - 170px)", py: 3  }}>
+          <Box sx={{ minHeight: "calc(100vh - 170px)", py: 3 }}>
             {children}
           </Box>
           {/* ------------------------------------------- */}
           {/* End Page */}
           {/* ------------------------------------------- */}
         </Container>
+        {/* ------------------------------------------- */}
+        {/* Chatbot */}
+        {/* ------------------------------------------- */}
+        <Chatbot />
       </PageWrapper>
     </MainWrapper>
   );
